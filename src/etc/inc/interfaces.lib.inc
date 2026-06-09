@@ -251,22 +251,17 @@ function legacy_interface_stats($ifs = null)
  */
 function legacy_interfaces_details($intf = null)
 {
+    $cmd = '/sbin/ifconfig -Lmv';
+    $err_file = '/dev/null';
     $result = [];
+
     if (!empty($intf)) {
-        $tmp_intf = escapeshellarg($intf);
+        $cmd .= ' ' . escapeshellarg($intf);
     } else {
-        $tmp_intf = '';
+        $err_file = tempnam('/tmp', 'ifconfig_err.');
     }
 
-    $cmd = '/sbin/ifconfig -Lmv ' . $tmp_intf;
-    exec($cmd . ' 2>&1', $ifconfig_data, $ret);
-    if ($ret) {
-        /* only error if no explicit interface was chosen */
-        if (empty($intf)) {
-            legacy_interface_error($cmd, implode(' ', $ifconfig_data));
-        }
-        return $result;
-    }
+    exec($cmd . ' 2> ' . escapeshellarg($err_file), $ifconfig_data, $ret);
 
     $vfaces = interfaces_virtual_patterns();
     $current_interface = null;
@@ -533,6 +528,16 @@ function legacy_interfaces_details($intf = null)
             $result[$current_interface]["timeout"] = $matches[5];
         }
     }
+
+    /* only error if no explicit interface was chosen */
+    if (empty($intf)) {
+        if ($ret) {
+            $errors = array_filter(explode("\n", file_get_contents($err_file)));
+            legacy_interface_error($cmd, 'ret=' . $ret . '; ' . join('; ', $errors));
+        }
+        @unlink($err_file);
+    }
+
 
     return $result;
 }
